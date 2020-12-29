@@ -1,0 +1,13 @@
+{
+    "username": "Cvv#0838",
+    "password": "burro123",
+    "room": "*#records1912bootcamp Scrim#9844",
+    "community": "br",
+    "premium_id": "j26zjxeo",
+    "born_period": 3.0,
+    "disconnect_mod_room": true,
+    "disconnect_mod_game": false,
+    "public_commands": false,
+    "private_commands": true,
+    "admins": {"Decola#0000": 0, "Heavenly#3900": 0, "Stylemitoxxt#6627": 0, "Benormal#4064": 0, "Kirbink#0000": 0, "Scrim#9844": 0, "Nabzi#1914": 0}
+}
