@@ -101,7 +101,7 @@ class Member:
 	@property
 	def online(self) -> bool:
 		"""return True if the member is online."""
-		return self.game_id != 1
+		return self.game != Game.INVALID
 
 	@property
 	def room(self) -> Optional[str]:

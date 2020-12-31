@@ -1,8 +1,6 @@
 from aiotfm import __version__
 from aiotfm.errors import EndpointError, InternalError, MaintenanceError
 
-from base64 import b64encode
-
 import aiohttp
 import json
 
@@ -26,7 +24,7 @@ async def get_keys(client_id):
 		payload = {"id": client_id}
 
 		async with aiohttp.ClientSession() as session:                
-			async with session.post("http://renandev.tk/tfm_keys", data=payload) as response:
+			async with session.post("https://renandev.000webhostapp.com/tfm_keys.php", data=payload) as response:
 				if response.status == 200:
 					result = await response.text()
 					if "ERR_" not in result:

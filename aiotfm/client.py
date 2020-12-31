@@ -1032,14 +1032,7 @@ class Client:
 			return True
 		except Exception as e:
 			if hasattr(self, 'on_error'):
-				try:
-					await self.on_error(command_name, e, *args)
-				except Exception as e:
-					if not self.auto_restart:
-						self.close()
-				finally:
-					if self.auto_restart:
-						asyncio.ensure_future(self.restart_soon(), loop=self.loop)
+				await self.on_error(command_name, e, *args)
 		return False
 
 	def dispatch(self, event: str, *args, **kwargs):
