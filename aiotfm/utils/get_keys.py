@@ -24,7 +24,7 @@ async def get_keys(client_id):
 		payload = {"id": client_id}
 
 		async with aiohttp.ClientSession() as session:                
-			async with session.post("https://renandev.000webhostapp.com/tfm_keys.php", data=payload) as response:
+			async with session.post("http://188.165.55.139/tfm_keys.php", data=payload) as response:
 				if response.status == 200:
 					result = await response.text()
 					if "ERR_" not in result:
