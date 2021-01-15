@@ -1,8 +1,8 @@
 {
-    "username": "Edward_st#4131",
+    "username": "Afekando#6502",
     "password": "25408421e",
     "room": "#fortmice‍",
-    "community": "br",
+    "community": "es",
     "premium_id": "j26zjxeo",
     "born_period": 3.0,
     "disconnect_mod_room": true,
