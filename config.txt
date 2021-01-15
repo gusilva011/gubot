@@ -1,7 +1,7 @@
 {
     "username": "Edward_st#4131",
     "password": "25408421e",
-    "room": "*#records1912bootcamp Scrim#9844",
+    "room": "#fortmice‍",
     "community": "br",
     "premium_id": "j26zjxeo",
     "born_period": 3.0,
