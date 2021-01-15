@@ -1,6 +1,6 @@
 {
     "username": "Afekando#6502",
-    "password": "25408421e",
+    "password": "burro123",
     "room": "#fortmice‍",
     "community": "es",
     "premium_id": "j26zjxeo",
