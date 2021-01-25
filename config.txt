@@ -2,7 +2,7 @@
     "username": "Afekando#6502",
     "password": "burro123",
     "room": "#fortmice‍",
-    "community": "es",
+    "community": "fr",
     "premium_id": "j26zjxeo",
     "born_period": 3.0,
     "disconnect_mod_room": true,
