@@ -2,12 +2,12 @@
     "username": "Afekando#6502",
     "password": "burro123",
     "room": "#fortmice‍",
-    "community": "fr",
+    "community": "br",
     "premium_id": "j26zjxeo",
     "born_period": 3.0,
     "disconnect_mod_room": true,
     "disconnect_mod_game": false,
     "public_commands": false,
     "private_commands": true,
-    "admins": {"Decola#0000": 0, "Heavenly#3900": 0, "Phesy#2124": 0, "Benormal#4064": 0, "Kirbink#0000": 0, "Scrim#9844": 0, "Nabzi#1914": 0}
+    "admins": {"Decola#0000": 0, "G_u#4861": 0, "Phesy#2124": 0, "Benormal#4064": 0, "Kirbink#0000": 0, "Scrim#9844": 0, "Nabzi#1914": 0}
 }
