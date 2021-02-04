@@ -1,12 +1,13 @@
 import asyncio
+import logging
 from asyncio import AbstractEventLoop, Protocol, BaseTransport, Transport
 from typing import Optional, Tuple
 
-import logging
-logger = logging.getLogger('aiotfm')
-
 import aiotfm  # circular import, don't `import from`
 from aiotfm.errors import AiotfmException
+
+logger = logging.getLogger('aiotfm')
+
 
 class TFMProtocol(Protocol):
 	def __init__(self, conn):
@@ -43,17 +44,18 @@ class TFMProtocol(Protocol):
 	def connection_lost(self, exc: Optional[Exception] = None):
 		self.connection.open = False
 
-		if exc is not None:
+		if exc is None:
+			logger.info('Connection %s has been lost.', self.connection.name)
+		else:
+			logger.error('Connection %s has been lost. Reason:', self.connection.name, exc_info=exc)
 			# :desc: Called when a connection has been lost due to an error.
 			# :param connection: :class:`Connection` the connection that has been lost.
 			# :param exception: :class:`Exception` the error which occurred.
 			self.client.dispatch('connection_error', self.connection, exc)
 
-		if self.connection.name == "main":
-			try:
-				self.client._close_event.set_result(('connection_lost', 10, None))
-			except asyncio.InvalidStateError:
-				logger.debug("Failed to set result for `_close_event`")
+		if self.connection.name == "main" and not self.client._close_event.done():
+			self.client._close_event.set_result(('connection_lost', 10, None))
+
 
 class Connection:
 	"""Represents the connection between the client and the host."""

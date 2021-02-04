@@ -196,6 +196,9 @@ class Profile:
 		self.gender = packet.read8()
 		self.tribe = packet.readUTF() or None
 		self.soulmate = packet.readUTF() or None
+		if self.soulmate is not None:
+			self.soulmate = str(Player(self.soulmate))
+			
 		stats = [packet.read32() for i in range(7)]
 		self.title = packet.read16()
 

@@ -28,7 +28,7 @@ class FriendList:
 		for i in range(packet.read16()):
 			self.friends.append(Friend(self, packet))
 
-		self._client = client
+		self._client: aiotfm.Client = client
 
 	def __iter__(self) -> Iterable['Friend']:
 		return iter(self.friends)
@@ -54,7 +54,7 @@ class FriendList:
 					
 		return None
 
-	async def remove(self, friend):
+	async def remove(self, friend: Union[Player, 'Friend', str]):
 		"""|coro|
 		Remove a friend. If they're your soulmate, divorce them.
 		:param friend: :class:`str` or :class:`aiotfm.Player` or :class:`aiotfm.friend.Friend`
@@ -172,14 +172,14 @@ class Friend:
 		# default avatar
 		return 'https://avatars.atelier801.com/0/0.jpg'
 
+	@property
+	def room(self) -> Optional[str]:
+		if not self.roomName:
+			return None
+		return self.roomName if self.roomName.startswith("*") else self.roomName.split("-", 1)[1]
+
 	def remove(self):
 		"""|coro|
 		Remove this friend. If they're your soulmate, divorce them.
 		"""
 		return self._flist.remove(self)
-
-	@property
-	def room(self):
-		if not self.roomName:
-			return None
-		return self.roomName if self.roomName.startswith("*") else self.roomName.split("-", 1)[1]

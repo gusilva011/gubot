@@ -45,10 +45,11 @@ class Command(Message):
 		
 	async def reply(self, msg: str):
 		if self.platform == 'tribe':
-			return await self._client.sendTribeMessage(msg)
+			await self._client.sendTribeMessage(msg)
 		elif self.platform == 'whisper':
-			return await self._client.whisper(self.author, msg)
-		return await self._client.sendRoomMessage(msg)
+			await self._client.whisper(self.author, msg)
+		else:
+			await self._client.sendRoomMessage(msg)
 
 class Whisper(Message):
 	"""Represents a whisper from the chat.

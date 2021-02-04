@@ -1,11 +1,10 @@
 from aiotfm import __version__
-from aiotfm.errors import EndpointError, InternalError, MaintenanceError
+from aiotfm.errors import EndpointError
 
 import aiohttp
 import json
 
 class Keys:
-	"""Represents the keys used by the client to communicate to the server."""
 	def __init__(self, **keys):
 		self.auth = keys.pop('auth_key', 0)
 		self.connection = keys.pop('connection_key', '')
@@ -19,25 +18,25 @@ class Keys:
 
 async def get_keys(client_id):
 	data = {}
-	
+	payload = {"token": client_id}
+
 	try:
-		payload = {"id": client_id}
-
 		async with aiohttp.ClientSession() as session:                
-			async with session.post("http://188.165.55.139/tfm_keys.php", data=payload) as response:
-				if response.status == 200:
-					result = await response.text()
-					if "ERR_" not in result:
-						data = json.loads(result)
-	except:
-		print("[Endpoint] Error while trying to get the keys")
-		
-	if data:
-		keys = Keys(**data)
+			async with session.get("https://tfmkeyparser.herokuapp.com/tfm_keys", params=payload) as response:
+				data = await response.json()
+	except aiohttp.client_exceptions.ClientConnectorError:
+		async with aiohttp.ClientSession() as session:                
+			async with session.get("https://tfmkeyparser-alt.herokuapp.com/tfm_keys", params=payload) as response:
+				data = await response.json()
 
-		if len(keys.packet) > 0 and len(keys.identification) > 0 and len(keys.msg) > 0:
-			return keys
+	success = data.pop("success", False)
+	error = data.pop("error", "").capitalize()
 
-		raise Exception("Something goes wrong: A key is empty. {}".format(data))
-	else:
-		raise Exception("Can't get the keys.")
+	if not success:
+		raise EndpointError(error)
+
+	keys = Keys(**data)
+	if len(keys.packet) > 0 and len(keys.identification) > 0 and len(keys.msg) > 0 and keys.version != 0:
+		return keys
+
+	raise EndpointError('Something went wrong: A key is empty ! {}'.format(data))

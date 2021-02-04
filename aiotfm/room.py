@@ -15,8 +15,7 @@ class Map:
 	
 	is_reversed = False
 
-	xml = ""
-
+	author, xml = "", ""
 
 class Room:
 	"""Represents the room that the bot currently is in.

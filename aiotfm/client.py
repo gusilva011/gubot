@@ -112,7 +112,7 @@ class Client:
 		self._logged: bool = False
 		self._max_retries: int = max_retries
 
-		self._room: Room = None
+		self.room: Room = None
 		self.trade: Trade = None
 		self.trades: dict = {}
 		self.inventory: Inventory = None
@@ -129,6 +129,7 @@ class Client:
 
 		self.auto_restart: bool = auto_restart
 		self.bot_role: bool = bot_role
+		self.no_bulle: bool = False
 
 	@property
 	def restarting(self) -> bool:
@@ -137,6 +138,10 @@ class Client:
 	@property
 	def closed(self) -> bool:
 		return self._closed
+
+	def _backoff(self, n: int) -> float:
+		"""Returns the numbers of seconds to wait until the n-th connection attempt. Capped at 10 minutes."""
+		return random.uniform(20, 30 * 2 ** min(n, 5))
 
 	def data_received(self, data: bytes, connection: Connection):
 		"""|coro|
@@ -151,10 +156,7 @@ class Client:
 		# the packet.
 		# :param packet: :class:`aiotfm.Packet` a copy of the packet.
 		self.dispatch('raw_socket', connection, Packet(data))
-		try:
-			self.loop.create_task(self.handle_packet(connection, Packet(data)))
-		except Exception:
-			traceback.print_exc()
+		self.loop.create_task(self.handle_packet(connection, Packet(data)))
 
 	async def handle_packet(self, connection: Connection, packet: Packet) -> bool:
 		"""|coro|
@@ -239,7 +241,7 @@ class Client:
 			
 			self.dispatch('player_direction_change', player)
 			
-		elif CCC == (5, 2):
+		elif CCC == (5, 2):			
 			self._room.map.code = packet.read32()
 			packet.read16()
 			self._room.round_code = packet.read8()
@@ -251,7 +253,7 @@ class Client:
 			except:
 				pass
 				
-			packet.readUTF()
+			self._room.map.author = packet.readUTF()
 			self._room.map.perm = packet.read8()
 
 			is_reversed = packet.readBool()
@@ -304,7 +306,8 @@ class Client:
 					asyncio.ensure_future(self._run_command(coro, command.name, command, *command.args), loop=self.loop)
 					
 		elif CCC == (6, 9): # Room Lua message
-			self.dispatch('room_lua_message', packet.readUTF())
+			message = packet.readUTF()
+			self.dispatch('room_lua_message', message)
 
 		elif CCC == (6, 20): # Server message
 			packet.readBool() # if False then the message will appear in the #Server channel
@@ -424,10 +427,9 @@ class Client:
 			language = packet.readUTF()
 			country = packet.readUTF()
 			self.authkey = packet.read32()
-
 			self._logged = False
 
-			await connection.send(Packet.new(176, 1).writeUTF(self.community.name))
+			# await connection.send(Packet.new(176, 1).writeUTF(self.community.name))
 
 			os_info = Packet.new(28, 17).writeString('en').writeString('Linux')
 			os_info.writeString('LNX 29,0,0,140').write8(0)
@@ -590,10 +592,13 @@ class Client:
 			self.trade._close(succeed=True)
 
 		elif CCC == (44, 1): # Bulle switching
+			if self.no_bulle:
+				return
+
 			timestamp = packet.read32()
 			uid = packet.read32()
 			pid = packet.read32()
-			bulle_ip = packet.readUTF()
+			bulle_ip = packet.readUTF()			
 			ports = packet.readUTF().split('-')
 
 			if self.bulle is not None:
@@ -675,6 +680,22 @@ class Client:
 					# :param after: :class:`aiotfm.friend.Friend` friend after this update
 					self.dispatch('friend_update', old, new)
 				self.dispatch('friend_room_change', new.name, new.roomName)
+
+			elif TC == 37: # Remove friend
+				if self.friends is None:
+					return True
+
+				friend = self.friends.get_friend(packet.read32())
+				if friend is not None:
+					if friend == self.friends.soulmate:
+						self.friends.soulmate = None
+
+					self.friends.friends.remove(friend)
+
+					# :desc: Called when a friend is removed
+					# :param friend: :class:`aiotfm.friend.Friend` the friend
+					self.dispatch('friend_remove', friend)
+
 
 			elif TC == 55: # Channel join result
 				sequenceId = packet.read32()
@@ -766,8 +787,9 @@ class Client:
 				receiver = Player(packet.readUTF())
 				message = packet.readUTF()
 
-				author = self._room.get_player(name=author, default=author)
-				receiver = self._room.get_player(name=receiver, default=receiver)
+				if self._room is not None:
+					author = self._room.get_player(name=author, default=author)
+					receiver = self._room.get_player(name=receiver, default=receiver)
 
 				# :desc: Called when the client receives a whisper.
 				# :param message: :class:`aiotfm.message.Whisper` the message.
@@ -796,16 +818,6 @@ class Client:
 				if self.LOG_UNHANDLED_PACKETS:
 					print(CCC, TC, bytes(packet.buffer)[4:])
 				return False
-
-		elif CCC == (100, 67): # New inventory item
-			slot = packet.read8()
-			slot = None if slot == 0 else slot
-			item_id = packet.read16()
-			quantity = packet.read16()
-
-			item = InventoryItem(item_id=item_id, quantity=quantity, slot=slot)
-			self.inventory[item_id] = item
-			self.dispatch('new_item', item)
 
 		elif CCC == (144, 1): # Set player list
 			before = self._room.players
@@ -1019,11 +1031,11 @@ class Client:
 				# except asyncio.CancelledError:
 				# 	raise
 				except Exception:
-					if not self.auto_restart:
-						self.close()
-				finally:
 					if self.auto_restart:
-						asyncio.ensure_future(self.restart_soon(), loop=self.loop)
+						await self.restart(5)
+					else:
+						self.close()
+
 		return False
 		
 	async def _run_command(self, coro: Callable, command_name: str, command: Command, *args) -> bool:
@@ -1080,24 +1092,19 @@ class Client:
 
 	async def on_error(self, event: str, err: Exception, *a, **kw):
 		"""Default on_error event handler. Prints the traceback of the error."""
-		message = '\nAn error occurred while dispatching the event "{0}":\n\n{2}'
-		tb = traceback.format_exc(limit=-3)
-		print(message.format(event, err, tb), file=sys.stderr)
-		return message.format(event, err, tb)
+		logger.error('An error occurred while dispatching the event "%s":', event, exc_info=-3)
 
 	async def on_connection_error(self, conn: Connection, error: Exception):
 		"""Default on_connection_error event handler. Prints the error."""
-		print('{0.__class__.__name__}: {0}'.format(error), file=sys.stderr)
+		logger.error('The %s connection has been closed.', conn.name, exc_info=error)
 
 	async def on_login_result(self, code: int, *args):
 		"""Default on_login_result handler. Raise an error and closes the connection."""
-		self.loop.call_later(5, self.close)
+		self.loop.call_later(3, self.close)
 		if code == 1:
 			raise AlreadyConnected()
 		if code == 2:
 			raise IncorrectPassword()
-		if code == 3:
-			raise AlreadyRegistered()
 		raise LoginError(code)
 
 	async def _connect(self):
@@ -1112,7 +1119,7 @@ class Client:
 			try:
 				await self.main.connect(self.keys.server_ip, port)
 			except Exception:
-				pass
+				logger.debug(f'Unable to connect to the server "{self.keys.server_ip}:{port}".')
 			else:
 				break
 		else:
@@ -1129,7 +1136,7 @@ class Client:
 		packet.writeString('Desktop').writeString('-').write32(0x1fbd).writeString('')
 		packet.writeString('74696720697320676f6e6e61206b696c6c206d7920626f742e20736f20736164')
 		packet.writeString(
-			"A=t&SA=t&SV=t&EV=t&MP3=t&AE=t&VE=t&ACC=t&PR=t&SP=f&SB=f&DEB=f&V=LNX 29,0,0,140&M=Adobe"
+			"A=t&SA=t&SV=t&EV=t&MP3=t&AE=t&VE=t&ACC=t&PR=t&SP=f&SB=f&DEB=f&V=LNX 32,0,0,182&M=Adobe"
 			" Linux&R=1920x1080&COL=color&AR=1.0&OS=Linux&ARCH=x86&L=en&IME=t&PR32=t&PR64=t&LS=en-U"
 			"S&PT=Desktop&AVD=f&LFD=f&WD=f&TLS=t&ML=5.1&DP=72")
 		packet.write32(0).write32(0x6257).writeString('')
@@ -1145,7 +1152,7 @@ class Client:
 		if 'username' in kwargs and 'password' in kwargs:
 			# Monkey patch the on_login_ready event
 			if hasattr(self, 'on_login_ready'):
-				event = self.on_login_ready
+				event = getattr(self, 'on_login_ready')
 				self.on_login_ready = lambda *a: asyncio.gather(self.login(**kwargs), event(*a))
 			else:
 				self.on_login_ready = lambda *a: self.login(**kwargs)
@@ -1155,23 +1162,25 @@ class Client:
 		keep_alive = Packet.new(26, 26)
 		while True:
 			self._close_event = asyncio.Future()
-			self._restarting = False
 
 			try:
-				logger.debug('Trying to connect')
+				logger.info('Connecting to the game.')
 				await self._connect()
 				await self.sendHandshake()
 				await self.locale.load()
 				retries = 0 # Connection successful
+				self._restarting = False
 			except Exception as e:
-				logger.error('ouch')
+				logger.error('Connection to the server failed.', exc_info=e)
 				if on_started is not None:
 					on_started.set_exception(e)
 				elif retries > self._max_retries:
 					raise e
 				else:
 					retries += 1
-					await asyncio.sleep(5 * retries)
+					backoff = self._backoff(retries)
+					logger.info('Attempt %d failed. Reconnecting in %.2fs', retries, backoff)
+					await asyncio.sleep(backoff)
 					continue
 			else:
 				if on_started is not None:
@@ -1183,37 +1192,46 @@ class Client:
 				await asyncio.wait((self._close_event,), timeout=15)
 
 			reason, delay, on_started = self._close_event.result()
+			self._close_event = asyncio.Future()
+
+			logger.debug('[Close Event] Reason: %s, Delay: %d, Callback: %s', reason, delay, on_started)
+			logger.debug('Will restart: %s', reason != 'stop' and self.auto_restart)
+
+			# clean up
+			for conn in (self.main, self.bulle):
+				if conn is not None:
+					conn.close()
+
 			if reason == 'stop' or not self.auto_restart:
 				break
 
 			await asyncio.sleep(delay)
-
-			# clean up
-			if self.bulle is not None:
-				self.bulle.close()
-			self.main.close()
 
 			# If we don't recreate the connection, we won't be able to connect.
 			self.main = Connection('main', self, self.loop)
 			self.bulle = None
 
 			# Fetch some fresh keys
-			if not self.bot_role:
+			if not self.bot_role and (reason != 'restart' or self.keys is None):
 				for i in range(self._max_retries):
 					try:
 						self.keys = await get_keys(client_id)
 						break
 					except MaintenanceError:
+						if i == 0:
+							logger.info('The game is under maintenance.')
+
 						await asyncio.sleep(30)
 				else:
-					raise MaintenanceError('The game is under an intensive maintenance.')
+					raise MaintenanceError('The game is under heavy maintenance.')
 
 	async def restart_soon(self, delay: float = 5.0, **kwargs):
-		"""Restarts the client in several seconds.
-
-		:param delay: :class:`int` the delay before restarting. Default is 5 seconds.
+		"""|coro|
+		Restarts the client in several seconds.
+		:param delay: :class:`float` the delay before restarting. Default is 5 seconds.
 		:param args: arguments to pass to the :meth:`Client.restart` method.
 		:param kwargs: keyword arguments to pass to the :meth:`Client.restart` method."""
+		warnings.warn('`Client.restart_soon` is deprecated, use `Client.restart` instead.', DeprecationWarning)
 		await self.restart(delay, **kwargs)
 
 	async def restart(self, delay: float = 0, keys: Optional[Keys] = None):
@@ -1228,12 +1246,10 @@ class Client:
 				'False or you have not started the Client using `Client.start`.'
 			)
 
-		if self._restarting:
+		if self._restarting or self._close_event.done():
 			return
 
-		if keys is not None:
-			self.keys = keys
-
+		self.keys = keys
 		self._restarting = True
 		# :desc: Notify when the client restarts.
 		self.dispatch("restart")
@@ -1255,7 +1271,6 @@ class Client:
 			raise AiotfmException('You cannot log in twice.')
 
 		self._logged = True
-
 		if not encrypted:
 			password = shakikoo(password)
 
@@ -1269,6 +1284,7 @@ class Client:
 			packet.write8(0).writeString('')
 			packet.cipher(self.keys.identification)
 
+		await self.main.send(Packet.new(176, 1).writeUTF(self.community.name))
 		await self.main.send(packet.write8(0))
 
 	def run(self, username: str, password: str, **kwargs):
